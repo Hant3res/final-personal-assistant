@@ -1,8 +1,52 @@
-name: Главный ассистент
-on: workflow_dispatch
-permissions: write-all
+name: Главный персональный ассистент
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Режим работы'
+        required: true
+        type: choice
+        options:
+          - утро
+          - день
+          - вечер
+          - отчет
+
+permissions:
+  contents: write
+
 jobs:
-  run:
+  assistant:
     runs-on: ubuntu-latest
+    
     steps:
-      - run: echo "Привет от ассистента!"
+      - name: Загружаем код
+        uses: actions/checkout@v4
+      
+      - name: Отправляем в Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🚀 *ПЕРСОНАЛЬНЫЙ АССИСТЕНТ АКТИВИРОВАН!*
+            
+            📅 Дата: $(date +"%d.%m.%Y")
+            ⏰ Время: $(date +"%H:%M")
+            🎯 Режим: ${{ github.event.inputs.mode }}
+            
+            *Чем могу помочь:*
+            
+            1. 📝 Управлять задачами
+            2. 🎯 Ставить цели
+            3. 📊 Вести статистику
+            4. 💡 Давать советы
+            
+            *Быстрые команды:*
+            • /tasks - список задач
+            • /goals - мои цели
+            • /stats - статистика
+            
+            💪 *Начни действовать прямо сейчас!*
+          parse_mode: markdown

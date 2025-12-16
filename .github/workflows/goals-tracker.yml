@@ -1,8 +1,67 @@
 name: Трекер целей
-on: workflow_dispatch
-permissions: write-all
+
+on:
+  workflow_dispatch:
+    inputs:
+      goal:
+        description: 'Новая цель'
+        required: true
+        type: string
+      deadline:
+        description: 'Срок (ГГГГ-ММ-ДД)'
+        required: false
+        type: string
+        default: "2024-12-31"
+
+permissions:
+  contents: write
+
 jobs:
-  run:
+  goals:
     runs-on: ubuntu-latest
+    
     steps:
-      - run: echo "Отслеживаю цели!"
+      - name: Загружаем код
+        uses: actions/checkout@v4
+      
+      - name: Добавляем цель в файл
+        run: |
+          echo "Цель: ${{ github.event.inputs.goal }}" >> goals.txt
+          echo "Срок: ${{ github.event.inputs.deadline }}" >> goals.txt
+          echo "Дата постановки: $(date)" >> goals.txt
+          echo "Статус: 🎯 В процессе" >> goals.txt
+          echo "---" >> goals.txt
+      
+      - name: Отправляем в Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🎯 *НОВАЯ ЦЕЛЬ УСТАНОВЛЕНА!*
+            
+            *Цель:* ${{ github.event.inputs.goal }}
+            📅 *Срок:* ${{ github.event.inputs.deadline }}
+            🗓️ *Поставлена:* $(date +"%d.%m.%Y")
+            
+            *Прогресс:* 0%
+            📊 *Статус:* Начато
+            
+            💪 *Мотивация:*
+            "Путь в тысячу ли начинается с первого шага."
+            
+            *Что сделать:*
+            1. Разбить цель на этапы
+            2. Начать первый этап сегодня
+            3. Отмечать прогресс
+            
+            🚀 *К цели!*
+          parse_mode: markdown
+      
+      - name: Сохраняем в репозиторий
+        run: |
+          git config user.email "github@actions.com"
+          git config user.name "GitHub Actions"
+          git add goals.txt
+          git commit -m "Добавлена цель: ${{ github.event.inputs.goal }}"
+          git push

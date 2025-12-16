@@ -1,8 +1,66 @@
 name: Менеджер задач
-on: workflow_dispatch
-permissions: write-all
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Новая задача'
+        required: true
+        type: string
+      priority:
+        description: 'Приоритет'
+        required: false
+        type: choice
+        options:
+          - высокий
+          - средний
+          - низкий
+        default: средний
+
+permissions:
+  contents: write
+
 jobs:
-  run:
+  tasks:
     runs-on: ubuntu-latest
+    
     steps:
-      - run: echo "Управляю задачами!"
+      - name: Загружаем код
+        uses: actions/checkout@v4
+      
+      - name: Добавляем задачу в файл
+        run: |
+          echo "Задача: ${{ github.event.inputs.task }}" >> tasks.txt
+          echo "Приоритет: ${{ github.event.inputs.priority }}" >> tasks.txt
+          echo "Дата: $(date)" >> tasks.txt
+          echo "---" >> tasks.txt
+      
+      - name: Отправляем в Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✅ *НОВАЯ ЗАДАЧА ДОБАВЛЕНА!*
+            
+            📝 *Задача:* ${{ github.event.inputs.task }}
+            ⚡ *Приоритет:* ${{ github.event.inputs.priority }}
+            📅 *Дата:* $(date +"%d.%m.%Y %H:%M")
+            
+            *Статус:* 🟡 В ожидании
+            
+            *Следующие шаги:*
+            1. Начать выполнение
+            2. Отметить прогресс
+            3. Завершить задачу
+            
+            💡 *Совет:* Выполняй задачи по приоритету!
+          parse_mode: markdown
+      
+      - name: Сохраняем в репозиторий
+        run: |
+          git config user.email "github@actions.com"
+          git config user.name "GitHub Actions"
+          git add tasks.txt
+          git commit -m "Добавлена задача: ${{ github.event.inputs.task }}"
+          git push
