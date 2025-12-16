@@ -1,0 +1,99 @@
+name: Менеджер задач
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Действие'
+        required: true
+        type: choice
+        options:
+          - добавить
+          - список
+          - статистика
+      task:
+        description: 'Название задачи'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tasks:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Загружаем код
+        uses: actions/checkout@v4
+        with:
+          token: \${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Обрабатываем действие
+        id: process
+        run: |
+          ACTION="\${{ github.event.inputs.action }}"
+          TASK="\${{ github.event.inputs.task }}"
+          
+          case \$ACTION in
+            "добавить")
+              if [ -z "\$TASK" ]; then
+                echo "message=⚠️ Нет названия задачи" >> \$GITHUB_OUTPUT
+                exit 0
+              fi
+              
+              # Добавляем задачу
+              TASK_ID="task_\$(date +%s)"
+              NEW_TASK="{\\"id\\": \\"\$TASK_ID\\", \\"task\\": \\"\$TASK\\", \\"created\\": \\"\$(date)\\", \\"status\\": \\"не начато\\"}"
+              
+              jq --argjson new "\$NEW_TASK" '.tasks += [\$new] | .last_update = "\$(date)"' tasks.json > temp.json
+              mv temp.json tasks.json
+              
+              echo "message=✅ Задача добавлена: *\$TASK*" >> \$GITHUB_OUTPUT
+              ;;
+            
+            "список")
+              COUNT=\$(jq '.tasks | length' tasks.json)
+              if [ \$COUNT -eq 0 ]; then
+                echo "message=📭 Список задач пуст" >> \$GITHUB_OUTPUT
+              else
+                LIST="📋 *СПИСОК ЗАДАЧ (\$COUNT)*\n\n"
+                for i in \$(seq 0 \$((COUNT-1))); do
+                  TASK_NAME=\$(jq -r ".tasks[\$i].task" tasks.json)
+                  STATUS=\$(jq -r ".tasks[\$i].status" tasks.json)
+                  LIST+="• \$TASK_NAME (\$STATUS)\n"
+                done
+                echo "message<<EOF" >> \$GITHUB_OUTPUT
+                echo "\$LIST" >> \$GITHUB_OUTPUT
+                echo "EOF" >> \$GITHUB_OUTPUT
+              fi
+              ;;
+            
+            "статистика")
+              TOTAL=\$(jq '.tasks | length' tasks.json)
+              COMPLETED=\$(jq '.total_completed' tasks.json)
+              STATS="📊 *СТАТИСТИКА ЗАДАЧ*\n\n"
+              STATS+="• Всего задач: \$TOTAL\n"
+              STATS+="• Выполнено: \$COMPLETED\n"
+              echo "message=\$STATS" >> \$GITHUB_OUTPUT
+              ;;
+          esac
+      
+      - name: Отправляем результат
+        if: steps.process.outputs.message
+        uses: appleboy/telegram-action@master
+        with:
+          to: \${{ secrets.TELEGRAM_CHAT_ID }}
+          token: \${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            \${{ steps.process.outputs.message }}
+          parse_mode: markdown
+      
+      - name: Сохраняем изменения
+        if: github.event.inputs.action == 'добавить'
+        run: |
+          git config user.email "github@actions.com"
+          git config user.name "GitHub Actions"
+          git add tasks.json
+          git commit -m "Добавлена задача: \${{ github.event.inputs.task }}" || echo "Нет изменений"
+          git push || echo "Нечего пушить"

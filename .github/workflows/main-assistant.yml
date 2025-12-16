@@ -1,0 +1,79 @@
+name: Главный персональный ассистент
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Режим работы'
+        required: true
+        type: choice
+        options:
+          - утро
+          - день
+          - вечер
+          - отчет
+
+permissions:
+  contents: write
+
+jobs:
+  assistant:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Загружаем код
+        uses: actions/checkout@v4
+        with:
+          token: \${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Определяем время
+        id: time_info
+        run: |
+          HOUR=$(date +%H)
+          DATE=$(date +"%d.%m.%Y")
+          WEEKDAY=$(date +%A)
+          
+          echo "hour=$HOUR" >> \$GITHUB_OUTPUT
+          echo "date=$DATE" >> \$GITHUB_OUTPUT
+          echo "weekday=$WEEKDAY" >> \$GITHUB_OUTPUT
+      
+      - name: Отправляем сообщение
+        uses: appleboy/telegram-action@master
+        with:
+          to: \${{ secrets.TELEGRAM_CHAT_ID }}
+          token: \${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🚀 *ПЕРСОНАЛЬНЫЙ АССИСТЕНТ*
+            
+            📅 Дата: \${{ steps.time_info.outputs.date }}
+            ⏰ Время: \${{ steps.time_info.outputs.hour }}:00
+            📌 День недели: \${{ steps.time_info.outputs.weekday }}
+            🎯 Режим: \${{ github.event.inputs.mode }}
+            
+            *Что будем делать?*
+            
+            1. 📝 Планировать задачи
+            2. 🎯 Ставить цели
+            3. 📊 Смотреть статистику
+            4. 💡 Получать советы
+            
+            💪 *Твой прогресс ждёт тебя!*
+            
+            Ответь на это сообщение своими планами!
+          parse_mode: markdown
+      
+      - name: Обновляем статистику
+        run: |
+          # Увеличиваем счётчик активных дней
+          if [ -f "stats.json" ]; then
+            jq '.days_active += 1' stats.json > temp.json
+            mv temp.json stats.json
+          else
+            echo '{"days_active": 1, "tasks_completed": 0, "goals_achieved": 0, "productivity_score": 0, "streak_days": 0}' > stats.json
+          fi
+          
+          git config user.email "github@actions.com"
+          git config user.name "GitHub Actions"
+          git add stats.json
+          git commit -m "Обновлена статистика активности" || echo "Нет изменений"
+          git push || echo "Нечего пушить"

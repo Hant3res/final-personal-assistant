@@ -1,0 +1,76 @@
+name: Трекер целей
+
+on:
+  workflow_dispatch:
+    inputs:
+      goal:
+        description: 'Новая цель'
+        required: false
+        type: string
+      deadline:
+        description: 'Срок (ГГГГ-ММ-ДД)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  goals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Загружаем код
+        uses: actions/checkout@v4
+        with:
+          token: \${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Обрабатываем цели
+        id: process
+        run: |
+          GOAL="\${{ github.event.inputs.goal }}"
+          DEADLINE="\${{ github.event.inputs.deadline }}"
+          
+          if [ -n "\$GOAL" ]; then
+            # Добавляем новую цель
+            GOAL_ID="goal_\$(date +%s)"
+            NEW_GOAL="{\\"id\\": \\"\$GOAL_ID\\", \\"goal\\": \\"\$GOAL\\", \\"deadline\\": \\"\$DEADLINE\\", \\"created\\": \\"\$(date)\\", \\"status\\": \\"в процессе\\"}"
+            
+            jq --argjson new "\$NEW_GOAL" '.goals += [\$new] | .in_progress += ["\$GOAL"]' goals.json > temp.json
+            mv temp.json goals.json
+            
+            echo "message=🎯 *НОВАЯ ЦЕЛЬ ДОБАВЛЕНА!*\n\n• \$GOAL\n• Срок: \$DEADLINE" >> \$GITHUB_OUTPUT
+          else
+            # Показываем список целей
+            TOTAL=\$(jq '.goals | length' goals.json)
+            IN_PROGRESS=\$(jq '.in_progress | length' goals.json)
+            
+            if [ \$TOTAL -eq 0 ]; then
+              echo "message=🎯 У тебя пока нет целей" >> \$GITHUB_OUTPUT
+            else
+              LIST="🎯 *ТВОИ ЦЕЛИ (\$TOTAL)*\n\n"
+              LIST+="• В процессе: \$IN_PROGRESS\n\n"
+              echo "message=\$LIST" >> \$GITHUB_OUTPUT
+            fi
+          fi
+      
+      - name: Отправляем в Telegram
+        if: steps.process.outputs.message
+        uses: appleboy/telegram-action@master
+        with:
+          to: \${{ secrets.TELEGRAM_CHAT_ID }}
+          token: \${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            \${{ steps.process.outputs.message }}
+            
+            💡 *Совет:* Разбей цель на маленькие шаги!
+          parse_mode: markdown
+      
+      - name: Сохраняем изменения
+        if: github.event.inputs.goal
+        run: |
+          git config user.email "github@actions.com"
+          git config user.name "GitHub Actions"
+          git add goals.json
+          git commit -m "Добавлена цель: \${{ github.event.inputs.goal }}" || echo "Нет изменений"
+          git push || echo "Нечего пушить"
